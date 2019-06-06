@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.8.1/css/all.css"
+    integrity="sha384-50oBUHEmvpQ+1lW4y57PTFmhCaXp0ML5d60M1M7uH2+nqUivzIebhndOJK28anvf" crossorigin="anonymous">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+  <script src="https://d3js.org/d3.v4.min.js" charset="utf-8"></script>
+  <script src="https://d3js.org/topojson.v2.min.js"></script>
+  <script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="./styles/style.css">
+  <link rel="stylesheet" type="text/css" href="./styles/map.css">
+  <link rel="stylesheet" type="text/css" href="./styles/star.css">
+  <script src="scripts/table.js"></script>
+  <script src="scripts/barchart.js"></script>
+  <script src="scripts/fips.js"></script>
+  <script src="scripts/utility.js"></script>
+  <script src="scripts/radarchart.js"></script>
+  <script src="scripts/statistics.js"></script>
+  <script src="scripts/graph.js"></script>
+  <title>CSC 595</title>
+</head>
+
+<body>
+  <!-- Begin header -->
+  <div class="header text-center viz-bg-light">
+    <!--div class="container">
+      <h1 class="header-h1">Census.Gov</h1>
+      <h2 class="header-h2">Visualizing Various Aspects of Life in the US</h2>
+    </div-->
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+  <div class="collapse navbar-collapse" id="navbarSupportedContent">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item">
+        <button class="btn viz-bg-dark" type="button">Population Density</button>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown"
+          aria-haspopup="true" aria-expanded="false">
+          Select Statistic
+        </a>
+        <div class="dropdown-menu" aria-labelledby="navbarDropdown">
+          <a class="dropdown-item" href="racial-makeup.html">Racial Makeup (B02001)</a>
+          <a class="dropdown-item" href="#about ">Another action</a>
+          <div class="dropdown-divider"></div>
+          <a class="dropdown-item" href="#">Something else here</a>
+        </div>
+      </li>
+      <form>
+        <label>
+        <select class="form-control fonrm-control-lg" id="options">
+          <option value="0" selected>Bar Chart</option>
+          <option value="1">Racial Makeup - Star Plot</option>
+          <option value="2">Force Layout</option>
+      </select>
+      </label>
+    </form>
+    </ul>
+
+  </div>
+</nav>
+  </div>
+  <!-- End header -->
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-lg-6">
+        <div id="div-t-l"></div>
+      </div>
+      <div class="col-lg-6">
+        <div id="div-t-r"></div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-lg-6">
+        <div id="canvas1"></div>
+      </div>
+      <div class="col-lg-6">
+        <div id="canvas2"></div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-lg-6">
+        <div id="div-b-l"></div>
+      </div>
+      <div class="col-lg-6">
+        <div id="div-b-r"></div>
+      </div>
+    </div>
+  </div>
+  <script type="module">
+    import { Map } from './scripts/map.js';
+    const chartType = ['none', 'bar Chart', 'Matrix', 'Force Layout']
+    const selectElement = document.querySelector('#options');
+    let option = chartType[selectElement.value];
+    selectElement.addEventListener('change', (event) => {
+        option = event.target.value;
+    });
+    const canvas1 = '#canvas1';
+    const canvas2 = '#canvas2';
+    const data = 'data/il.json';
+    let color = d3.scaleSequential(d3.interpolateInferno).domain([0.0, 19.0]);
+    let properties = { width: 600, height: 600, color: color, statistic: statistics[4] };
+    d3.json(data, function (error, data) {
+      console.log(data)
+      const map = new Map(canvas1, data, properties);
+      let counties = [];
+      map.draw();
+      map.dispatch.on('selected', (tract) => {
+        on();
+        console.log(countySummary(tract.id.slice(2, 5), statistics[4], data.features))
+        const bachelorAndMore = aggregateCountySummary(statistics[4], data.features)
+        let id = tract.id;
+        let fips = id.slice(2, 5)
+        let population = tract.properties.data.total_population;
+        let entry = { category:  county(fips), value: countySummary(fips, statistics[4], data.features) }
+        console.log(entry)
+        if(!existsInList(entry, counties)) {
+          counties.push(entry)
+        }
+        console.log(counties)
+        let graphData = buildGraphData(counties, average(bachelorAndMore))
+        console.log(graphData)
+
+        const graphCanvas = '#canvas2';
+        const graphProperties = { charge: -300, distance: 60 };
+        const canvasProperties = { width: 400, height: 400, flags: {} };
+        let graph = Force(graphCanvas, graphData, canvasProperties, graphProperties);
+        d3.select(graphCanvas).selectAll('g').remove();
+        graph.draw({ focusedNode: null, newGraph: true });
+        //properties = { width: 400, height: 400, color: color, tiltedXLabel: true };
+        //let BC = BarChart(canvas2, reverseSortJsonArray(counties, 'value'), properties)
+        //BC.draw();
+        function on() {
+          document.getElementById("canvas2").style.display = "block";
+        }
+        function off() {
+          document.getElementById("canvas2").style.display = "none";
+        }
+      });
+    });
+  </script>
+  <!-- Begin footer -->
+  <div class="footer text-center viz-bg-light">
+    <div class="members-footer container-fluid">
+      <div class="row">
+        <div class="viz-bg-dark col-lg-4">
+          <div id="yanning">
+            <svg width="100" height="100">
+              <defs>
+                <pattern id="img-yanning" x="0" y="0" height="1" width="1" patternUnits="objectBoundingBox">
+                  <image height="80" width="80" xlink:href="./images/yanning.jpeg" />
+                </pattern>
+              </defs>
+              <circle cx="50" cy="50" r = "40" fill="url(#img-yanning)" />
+            </svg>
+            <p class="header-h2">Yannning Cui</p>
+          </div>
+        </div>
+        <div class="viz-bg-dark col-lg-4">
+          <div id="nardos">
+            <svg width="100" height="100">
+              <defs>
+                <pattern id="img-nardos" x="0" y="0" height="1" width="1" patternUnits="objectBoundingBox">
+                  <image height="80" width="80" xlink:href="./images/nardos.jpg" />
+                </pattern>
+              </defs>
+              <circle cx="50" cy="50" r = "40" fill="url(#img-nardos)" />
+            </svg>
+            <p class="header-h2">Nardos Tessema</p>
+          </div>
+        </div>
+        <div class="viz-bg-dark col-lg-4">
+          <div id="mouhamad">
+            <svg width="100" height="100">
+              <defs>
+                <pattern id="img-mouhamad" x="0" y="0" height="1" width="1" patternUnits="objectBoundingBox">
+                  <image height="80" width="80" xlink:href="./images/mouhamad.png" />
+                </pattern>
+              </defs>
+              <circle cx="50" cy="50" r = "40" fill="url(#img-mouhamad)" />
+            </svg>
+            <p class="header-h2">Mouhamad Mashat</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <span class="header-h1">CSC 595</span><br>
+      <span class="header-h2">Interactive Data Visualizations for the Web</span><br>
+      <span class="cursive-1">DePaul University - College of Digital Media<br>Spring 2019</span><br>
+    </div>
+  </div>
+  <!-- End footer -->
+</body>
+</html>
